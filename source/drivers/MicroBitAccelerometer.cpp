@@ -253,40 +253,85 @@ int MicroBitAccelerometer::updateSample()
     // n.b. Default is Active LO. Interrupt is cleared in data read.
     if(!int1)
     {
-        int8_t data[6];
+        uint8_t data[6];
+		int16_t values[3];
+		int8_t  *raw = (int8_t*) values;
         int result;
 
-        result = readCommand(MMA8653_OUT_X_MSB, (uint8_t *)data, 6);
+        result = readCommand(MMA8653_OUT_X_MSB, data, 6);
         if (result !=0)
             return MICROBIT_I2C_ERROR;
 
         // read MSB values...
-        sample.x = data[0];
-        sample.y = data[2];
-        sample.z = data[4];
+//		int16_t xmsb = data[0]; 
+//		xmsb = xmsb << 4;
 
-        // Normalize the data in the 0..1024 range.
-        sample.x *= 8;
-        sample.y *= 8;
-        sample.z *= 8;
+//		int16_t ymsb = data[2];
+//		ymsb = ymsb << 4;
+		
+//		int16_t zmsb = data[4];
+//		zmsb = zmsb << 4;
+
+		// Flip the data for the x axis
+		raw[0] = data[1];
+		raw[1] = data[0];
+
+		// Flip the data for the y axis
+		raw[2] = data[3];
+		raw[3] = data[2];
+
+		// Flip the data for the z axis
+		raw[4] = data[5];
+		raw[5] = data[4];
+
+		// Shift the data by 4 bits
+        sample.x = values[0] >> 4;
+        sample.y = values[1] >> 4;
+        sample.z = values[2] >> 4;
+
+        // Move the upper byte into bits 12:4
+//		sample.x = (sample.x << 4);
+//        sample.y = (sample.y << 4);
+//        sample.z = (sample.z << 4);
 
 #if CONFIG_ENABLED(USE_ACCEL_LSB)
-        // Add in LSB values.
-        sample.x += (data[1] / 64);
-        sample.y += (data[3] / 64);
-        sample.z += (data[5] / 64);
+        // Add in LSB values into bits 3:0
+//		uint8_t xlsb = data[1] >> 4;
+//		sample.x += xlsb;
+
+//		uint8_t ylsb = data[3] >> 4;
+//		sample.y += ylsb;
+
+//		uint8_t zlsb = data[5] >> 4;
+//		sample.z += zlsb;
 #endif
 
         // Scale into millig (approx!)
-        sample.x *= this->sampleRange;
-        sample.y *= this->sampleRange;
-        sample.z *= this->sampleRange;
+		switch (this-> sampleRange) {
+		case 8:
+			// The scale factor is 4mg/LSB
+			sample.x *= 4;
+			sample.y *= 4;
+			sample.z *= 4;
+			break;
+		case 4:
+			// The scale factor is 2mg/LSB
+			sample.x *= 2;
+			sample.y *= 2;
+			sample.z *= 2;
+			break;
+		case 2:
+		default:
+			// The scale factor is 1mg/LSB
+			// Leave the data alone
+			break;
+		}
 
         // Indicate that pitch and roll data is now stale, and needs to be recalculated if needed.
         status &= ~MICROBIT_ACCEL_PITCH_ROLL_VALID;
 
         // Update gesture tracking
-        updateGesture();
+//        updateGesture();
 
         // Indicate that a new sample is available
         MicroBitEvent e(id, MICROBIT_ACCELEROMETER_EVT_DATA_UPDATE);
